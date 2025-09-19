@@ -130,4 +130,4 @@ Give a ⭐️ if this project helped you!
 
 ---
 
-**Made with ❤️ by [Your Name](https://github.com/PangeranJJ4321)**
+**Made with ❤️ by [PangeranJJ](https://github.com/PangeranJJ4321)**
