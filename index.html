@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact Manager Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          animation: {
+            'slide-in': 'slideIn 0.3s ease-out',
+            'fade-in': 'fadeIn 0.5s ease-out',
+            'bounce-in': 'bounceIn 0.6s ease-out',
+          },
+          keyframes: {
+            slideIn: {
+              '0%': { transform: 'translateY(-20px)', opacity: '0' },
+              '100%': { transform: 'translateY(0)', opacity: '1' }
+            },
+            fadeIn: {
+              '0%': { opacity: '0' },
+              '100%': { opacity: '1' }
+            },
+            bounceIn: {
+              '0%': { transform: 'scale(0.3)', opacity: '0' },
+              '50%': { transform: 'scale(1.1)', opacity: '0.8' },
+              '100%': { transform: 'scale(1)', opacity: '1' }
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .glass {
+      backdrop-filter: blur(16px) saturate(180%);
+      background-color: rgba(255, 255, 255, 0.75);
+      border: 1px solid rgba(209, 213, 219, 0.3);
+    }
+    .card-hover {
+      transition: all 0.3s ease;
+    }
+    .card-hover:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+  </style>
+  
+  <script>
+    let contacts = [];
+    let editingIndex = -1;
+    let allContacts = []; // Store all contacts for search functionality
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadContacts();
+      setupEventListeners();
+    });
+
+    const setupEventListeners = () => {
+      // Search functionality
+      const searchInput = document.getElementById("search");
+      searchInput.addEventListener("input", handleSearch);
+      
+      // Form validation
+      const form = document.getElementById("contact-form");
+      const inputs = form.querySelectorAll("input");
+      inputs.forEach(input => {
+        input.addEventListener("blur", validateField);
+        input.addEventListener("input", clearError);
+      });
+    };
+
+    // Load contacts from Google Sheets
+    const loadContacts = () => {
+      showLoading(true);
+      
+      google.script.run
+        .withSuccessHandler((data) => {
+          showLoading(false);
+          renderTable(data);
+        })
+        .withFailureHandler((error) => {
+          showLoading(false);
+          showNotification('Gagal memuat kontak: ' + error.message, 'error');
+          console.error('Error loading contacts:', error);
+        })
+        .getContacts();
+    };
+
+    const renderTable = (data) => {
+      if (data && data.length > 0) {
+        allContacts = data.slice(1); // Remove header row
+        contacts = [...allContacts]; // Copy for display
+        displayContacts(contacts);
+        updateStats();
+      } else {
+        contacts = [];
+        allContacts = [];
+        displayContacts(contacts);
+        updateStats();
+      }
+    };
+
+    const displayContacts = (contactsToShow) => {
+      const tbody = document.getElementById("table-body");
+      tbody.innerHTML = "";
+      
+      if (contactsToShow.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" class="text-center py-8 text-gray-500">
+              <div class="flex flex-col items-center">
+                <svg class="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+                <p class="text-lg font-medium">Belum ada kontak</p>
+                <p class="text-sm">Tambahkan kontak pertama Anda!</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      contactsToShow.forEach((contact, index) => {
+        const originalIndex = allContacts.findIndex(c => 
+          c[0] === contact[0] && c[1] === contact[1] && c[2] === contact[2] && c[3] === contact[3]
+        );
+        
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-gray-50 transition-colors duration-200 animate-fade-in";
+        tr.innerHTML = `
+          <td class="border-b px-6 py-4">
+            <div class="flex items-center">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold mr-3">
+                ${contact[1] ? contact[1].charAt(0).toUpperCase() : 'N'}
+              </div>
+              <div>
+                <div class="font-medium text-gray-900">${contact[1] || 'Tidak ada nama'}</div>
+                <div class="text-sm text-gray-500">ID: ${contact[0]}</div>
+              </div>
+            </div>
+          </td>
+          <td class="border-b px-6 py-4 text-gray-600">${contact[2] || '-'}</td>
+          <td class="border-b px-6 py-4">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              ${contact[3] || '-'}
+            </span>
+          </td>
+          <td class="border-b px-6 py-4">
+            <div class="flex space-x-2">
+              <button onclick="editContact(${contact[0]})" 
+                      class="text-blue-600 hover:text-blue-800 transition-colors p-2 hover:bg-blue-50 rounded-lg">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                </svg>
+              </button>
+              <button onclick="deleteContact(${contact[0]})" 
+                      class="text-red-600 hover:text-red-800 transition-colors p-2 hover:bg-red-50 rounded-lg">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    };
+
+    const handleSearch = (event) => {
+      const query = event.target.value.toLowerCase();
+      
+      if (!query.trim()) {
+        // Show all contacts if search is empty
+        displayContacts(allContacts);
+        return;
+      }
+
+      showLoading(true);
+      
+      google.script.run
+        .withSuccessHandler((data) => {
+          showLoading(false);
+          if (data && data.length > 0) {
+            const searchResults = data.slice(1); // Remove header
+            displayContacts(searchResults);
+          } else {
+            displayContacts([]);
+          }
+        })
+        .withFailureHandler((error) => {
+          showLoading(false);
+          showNotification('Gagal mencari kontak: ' + error.message, 'error');
+          // Fallback to local search
+          const filtered = allContacts.filter(contact => 
+            contact[1]?.toLowerCase().includes(query) ||
+            contact[2]?.toLowerCase().includes(query) ||
+            contact[3]?.toLowerCase().includes(query)
+          );
+          displayContacts(filtered);
+        })
+        .searchContacts(query);
+    };
+
+    const validateField = (event) => {
+      const field = event.target;
+      const value = field.value.trim();
+      const fieldName = field.getAttribute('placeholder');
+      
+      clearError(event);
+      
+      if (!value) {
+        showFieldError(field, `${fieldName} wajib diisi`);
+        return false;
+      }
+      
+      if (field.type === 'email' && !isValidEmail(value)) {
+        showFieldError(field, 'Format email tidak valid');
+        return false;
+      }
+      
+      return true;
+    };
+
+    const isValidEmail = (email) => {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
+
+    const showFieldError = (field, message) => {
+      field.classList.add('border-red-500', 'bg-red-50');
+      
+      let errorDiv = field.nextElementSibling;
+      if (!errorDiv || !errorDiv.classList.contains('error-message')) {
+        errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message text-red-500 text-sm mt-1';
+        field.parentNode.insertBefore(errorDiv, field.nextSibling);
+      }
+      errorDiv.textContent = message;
+    };
+
+    const clearError = (event) => {
+      const field = event.target;
+      field.classList.remove('border-red-500', 'bg-red-50');
+      
+      const errorDiv = field.nextElementSibling;
+      if (errorDiv && errorDiv.classList.contains('error-message')) {
+        errorDiv.remove();
+      }
+    };
+
+    const addContact = (event) => {
+      event.preventDefault();
+      
+      const name = document.getElementById("name").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const division = document.getElementById("division").value.trim();
+
+      // Validate all fields
+      const form = document.getElementById("contact-form");
+      const inputs = form.querySelectorAll("input");
+      let isValid = true;
+      
+      inputs.forEach(input => {
+        if (!validateField({ target: input })) {
+          isValid = false;
+        }
+      });
+
+      if (!isValid) return;
+
+      // Show loading state
+      const submitBtn = document.getElementById("submit-btn");
+      const originalText = submitBtn.innerHTML;
+      submitBtn.innerHTML = `
+        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Processing...
+      `;
+      submitBtn.disabled = true;
+
+      if (editingIndex >= 0) {
+        // Update existing contact
+        google.script.run
+          .withSuccessHandler((result) => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+            
+            if (result.success) {
+              form.reset();
+              editingIndex = -1;
+              submitBtn.innerHTML = '<svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>Tambah Kontak';
+              loadContacts(); // Reload to get updated data
+              showNotification(result.message, 'success');
+            } else {
+              showNotification(result.message, 'error');
+            }
+          })
+          .withFailureHandler((error) => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+            showNotification('Gagal memperbarui kontak: ' + error.message, 'error');
+          })
+          .updateContact(editingIndex, name, email, division);
+      } else {
+        // Add new contact
+        google.script.run
+          .withSuccessHandler((result) => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+            
+            if (result.success) {
+              form.reset();
+              loadContacts(); // Reload to get updated data
+              showNotification(result.message, 'success');
+            } else {
+              showNotification(result.message, 'error');
+            }
+          })
+          .withFailureHandler((error) => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+            showNotification('Gagal menambahkan kontak: ' + error.message, 'error');
+          })
+          .addContact(name, email, division);
+      }
+    };
+
+    const editContact = (id) => {
+      const contact = allContacts.find(c => c[0] == id);
+      if (!contact) {
+        showNotification('Kontak tidak ditemukan', 'error');
+        return;
+      }
+      
+      document.getElementById("name").value = contact[1] || '';
+      document.getElementById("email").value = contact[2] || '';
+      document.getElementById("division").value = contact[3] || '';
+      
+      editingIndex = id;
+      const submitBtn = document.getElementById("submit-btn");
+      submitBtn.innerHTML = '<svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Update Kontak';
+      
+      // Scroll to form
+      document.getElementById("contact-form").scrollIntoView({ behavior: 'smooth' });
+    };
+
+    const deleteContact = (id) => {
+      if (confirm('Apakah Anda yakin ingin menghapus kontak ini?')) {
+        showLoading(true);
+        
+        google.script.run
+          .withSuccessHandler((result) => {
+            showLoading(false);
+            if (result.success) {
+              loadContacts(); // Reload to get updated data
+              showNotification(result.message, 'success');
+            } else {
+              showNotification(result.message, 'error');
+            }
+          })
+          .withFailureHandler((error) => {
+            showLoading(false);
+            showNotification('Gagal menghapus kontak: ' + error.message, 'error');
+          })
+          .deleteContact(id);
+      }
+    };
+
+    const updateStats = () => {
+      google.script.run
+        .withSuccessHandler((stats) => {
+          document.getElementById("total-contacts").textContent = stats.totalContacts || 0;
+          document.getElementById("top-division").textContent = stats.topDivision || '-';
+        })
+        .withFailureHandler((error) => {
+          console.error('Error getting stats:', error);
+          // Fallback to local calculation
+          document.getElementById("total-contacts").textContent = allContacts.length;
+          
+          if (allContacts.length > 0) {
+            const divisions = {};
+            allContacts.forEach(contact => {
+              const division = contact[3] || 'Tidak ada divisi';
+              divisions[division] = (divisions[division] || 0) + 1;
+            });
+            
+            const topDivision = Object.keys(divisions).reduce((a, b) => 
+              divisions[a] > divisions[b] ? a : b, Object.keys(divisions)[0] || '-'
+            );
+            
+            document.getElementById("top-division").textContent = topDivision;
+          } else {
+            document.getElementById("top-division").textContent = '-';
+          }
+        })
+        .getStats();
+    };
+
+    const showNotification = (message, type = 'info') => {
+      const notification = document.createElement('div');
+      notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 animate-slide-in ${
+        type === 'success' ? 'bg-green-500 text-white' : 
+        type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+      }`;
+      notification.innerHTML = `
+        <div class="flex items-center">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            ${type === 'success' ? 
+              '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>' :
+              type === 'error' ?
+              '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>' :
+              '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'
+            }
+          </svg>
+          ${message}
+        </div>
+      `;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 4000);
+    };
+
+    const showLoading = (show) => {
+      const loading = document.getElementById("loading");
+      if (show) {
+        loading.classList.remove("hidden");
+      } else {
+        loading.classList.add("hidden");
+      }
+    };
+
+    const exportContacts = () => {
+      google.script.run
+        .withSuccessHandler((result) => {
+          if (result.success) {
+            const blob = new Blob([result.data], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = result.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            showNotification('Data berhasil diekspor', 'success');
+          } else {
+            showNotification(result.message, 'error');
+          }
+        })
+        .withFailureHandler((error) => {
+          showNotification('Gagal mengekspor data: ' + error.message, 'error');
+        })
+        .exportContactsCSV();
+    };
+
+    // Import functionality
+    const importContacts = () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.csv';
+      input.onchange = function(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const csv = e.target.result;
+            showLoading(true);
+            
+            google.script.run
+              .withSuccessHandler((result) => {
+                showLoading(false);
+                if (result.success) {
+                  loadContacts();
+                  showNotification(result.message, 'success');
+                  if (result.errors > 0) {
+                    console.warn('Import errors:', result.errorDetails);
+                  }
+                } else {
+                  showNotification(result.message, 'error');
+                }
+              })
+              .withFailureHandler((error) => {
+                showLoading(false);
+                showNotification('Gagal mengimpor data: ' + error.message, 'error');
+              })
+              .importContactsCSV(csv);
+          };
+          reader.readAsText(file);
+        }
+      };
+      input.click();
+    };
+
+    // Backup functionality
+    const backupData = () => {
+      if (confirm('Buat backup data saat ini?')) {
+        showLoading(true);
+        
+        google.script.run
+          .withSuccessHandler((result) => {
+            showLoading(false);
+            if (result.success) {
+              showNotification(result.message, 'success');
+            } else {
+              showNotification(result.message, 'error');
+            }
+          })
+          .withFailureHandler((error) => {
+            showLoading(false);
+            showNotification('Gagal membuat backup: ' + error.message, 'error');
+          })
+          .backupData();
+      }
+    };
+  </script>
+</head>
+
+<body class="min-h-screen gradient-bg">
+  <div class="container mx-auto px-4 py-8 max-w-6xl">
+    
+    <!-- Header -->
+    <div class="text-center mb-8 animate-bounce-in">
+      <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
+        📇 Contact Manager Pro
+      </h1>
+      <p class="text-white/80 text-lg">Kelola kontak Anda dengan mudah dan efisien</p>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div class="glass rounded-xl p-6 card-hover animate-fade-in">
+        <div class="flex items-center">
+          <div class="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+          </div>
+          <div>
+            <p class="text-gray-600 text-sm font-medium">Total Kontak</p>
+            <p class="text-2xl font-bold text-gray-900" id="total-contacts">0</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass rounded-xl p-6 card-hover animate-fade-in" style="animation-delay: 0.1s">
+        <div class="flex items-center">
+          <div class="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center mr-4">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+            </svg>
+          </div>
+          <div>
+            <p class="text-gray-600 text-sm font-medium">Divisi Terbanyak</p>
+            <p class="text-2xl font-bold text-gray-900" id="top-division">-</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass rounded-xl p-6 card-hover animate-fade-in" style="animation-delay: 0.2s">
+        <div class="flex items-center">
+          <div class="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mr-4">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <div>
+            <p class="text-gray-600 text-sm font-medium">Status</p>
+            <p class="text-2xl font-bold text-green-600">Active</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form Section -->
+    <div class="glass rounded-xl p-8 mb-8 card-hover animate-slide-in">
+      <h2 class="text-2xl font-bold text-gray-800 mb-6">
+        <svg class="inline w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        Tambah Kontak Baru
+      </h2>
+      
+      <form id="contact-form" class="grid grid-cols-1 md:grid-cols-3 gap-6" onsubmit="addContact(event)">
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-gray-700">Nama Lengkap</label>
+          <input id="name" type="text" placeholder="Nama Lengkap" required 
+                 class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+        </div>
+        
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-gray-700">Email</label>
+          <input id="email" type="email" placeholder="Email" required 
+                 class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+        </div>
+        
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-gray-700">Divisi</label>
+          <input id="division" type="text" placeholder="Divisi" required 
+                 class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+        </div>
+        
+        <div class="md:col-span-3 flex justify-center">
+          <button id="submit-btn" type="submit" 
+                  class="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl">
+            <svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+            Tambah Kontak
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Search and Actions -->
+    <div class="glass rounded-xl p-6 mb-8 animate-slide-in">
+      <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div class="relative flex-1 max-w-md">
+          <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+          <input id="search" type="text" placeholder="Cari kontak..." 
+                 class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        
+        <div class="flex gap-2">
+          <button onclick="exportContacts()" 
+                  class="px-4 py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-colors duration-200">
+            <svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            Export CSV
+          </button>
+          
+          <button onclick="importContacts()" 
+                  class="px-4 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200">
+            <svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+            </svg>
+            Import CSV
+          </button>
+          
+          <button onclick="backupData()" 
+                  class="px-4 py-3 bg-purple-500 text-white rounded-lg font-medium hover:bg-purple-600 transition-colors duration-200">
+            <svg class="inline w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"></path>
+            </svg>
+            Backup
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table Section -->
+    <div class="glass rounded-xl overflow-hidden card-hover animate-fade-in">
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-50 border-b">
+            <tr>
+              <th class="text-left py-4 px-6 font-semibold text-gray-700">Kontak</th>
+              <th class="text-left py-4 px-6 font-semibold text-gray-700">Email</th>
+              <th class="text-left py-4 px-6 font-semibold text-gray-700">Divisi</th>
+              <th class="text-left py-4 px-6 font-semibold text-gray-700">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <!-- Content will be populated by JavaScript -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="glass rounded-xl p-8">
+        <div class="flex items-center">
+          <svg class="animate-spin h-8 w-8 text-blue-500 mr-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="text-lg font-medium text-gray-700">Memuat kontak...</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
